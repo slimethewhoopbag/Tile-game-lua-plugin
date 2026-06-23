@@ -104,22 +104,6 @@ local function dropTile(x, z, secs)
 	end)
 end
 
-local function breakTile(x, z, duration)
-	local model = tileRefs and tileRefs[x] and tileRefs[x][z]
-	if not model then return end
-	local col = model:FindFirstChild("Collision")
-	if col then col.CanCollide = false end
-	local hidden = {}
-	for _, name in ipairs({"ColorTile","OuterRing","Base"}) do
-		local p = model:FindFirstChild(name)
-		if p and p:IsA("BasePart") then table.insert(hidden, {p=p, t=p.Transparency}); p.Transparency = 1 end
-	end
-	task.delay(duration or Config.Crumble.Restore, function()
-		if col and col.Parent then col.CanCollide = true end
-		for _, h in ipairs(hidden) do if h.p.Parent then h.p.Transparency = h.t end end
-	end)
-end
-
 -- single source of truth: an Inverter (or any neutraliser) is next door
 local function isInverterAdj(x, z)
 	return TileRules.hasAdjacentNeutralizer(currentLevel.grid, x, z)
@@ -224,6 +208,13 @@ end
 local function handleStep(plr, x, z)
 	local cell = currentLevel.grid[x][z]
 	local t = cell.tile
+
+	-- A tile switched off by a beacon does nothing. A deactivated Phantom still reveals
+	-- what it was hiding, but deals no damage. Goal and Spawn are never deactivated.
+	if cell.attr.Deactivated then
+		if t == "Phantom" then revealPhantom(x, z) end
+		return
+	end
 
 	if t == "Goal" then
 		if not plr:GetAttribute("Won") then
@@ -386,7 +377,11 @@ local function buildArena()
 			col.Size = Vector3.new(layout.pitchX, 0.4, layout.pitchZ)   -- edge-to-edge, no seams, one cell each
 			col.Position = Vector3.new(center.X, standY - 0.2, center.Z)
 			col:SetAttribute("GridX", x); col:SetAttribute("GridZ", z); col:SetAttribute("TileType", cell.tile)
-			if cell.tile == "Ice" then
+			-- Read by the client heartbeat for Spring height and the Void tint. "Inverted"
+			-- already excludes deactivated inverters (see TileRules.hasAdjacentNeutralizer).
+			col:SetAttribute("Inverted", isInverterAdj(x, z))
+			col:SetAttribute("Deactivated", cell.attr.Deactivated == true)
+			if cell.tile == "Ice" and not cell.attr.Deactivated then
 				local fr = isInverterAdj(x,z) and Config.Ice.GrippyFriction or Config.Ice.Friction
 				col.CustomPhysicalProperties = PhysicalProperties.new(0.7, fr, 0, Config.Ice.Weight, 1)
 			end
@@ -471,7 +466,8 @@ RunService.Heartbeat:Connect(function(dt)
 
 
 				local cell = currentLevel.grid[gx][gz]
-				Remotes.ClientEffect:FireClient(plr, "Tile", cell.tile, isInverterAdj(gx, gz))
+				-- Void tint and Spring height are driven entirely client-side from the
+				-- collision pad's attributes (see TileVisualsClient); no per-step event needed.
 				if Config.Debug.ShowSafePath and Config.Debug.PaintMode == "Touch" and cell.onPath then
 					paintBase(gx, gz)
 				end

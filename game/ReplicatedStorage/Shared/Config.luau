@@ -49,7 +49,7 @@ Config.Spring = { Default = 7.2, High = 20, Low = 2 }
 Config.Ice    = { Friction = 0.02, GrippyFriction = 2.0, Weight = 100 }
 Config.Void   = { Tint = 0.05, FadeTime = 0.2, Dark = Color3.new(0,0,0), Light = Color3.new(1,1,1) }
 Config.Shock   = { AoeRadius = 10 }
-Config.Crumble = { Delay = 1.0, Restore = 2.0, DropTime = 8 }
+Config.Crumble = { Delay = 1.0, DropTime = 8 }
 
 
 Config.Push = {

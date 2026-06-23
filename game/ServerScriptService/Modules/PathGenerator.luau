@@ -18,7 +18,6 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local TileDatabase = require(Shared:WaitForChild("TileDatabase"))
 local TileRules    = require(Shared:WaitForChild("TileRules"))
 
 local PathGenerator = {}
@@ -349,15 +348,19 @@ local function decorate(grid, w, l, rng)
 end
 
 --========================= beacons (bounded to BeaconRange) ================--
+-- A Beacon switches OFF every tile it reaches except Goal and Spawn — hazards, mechanics
+-- (Push/Warp/Crumble/Spring/Ice/Void), Phantoms, and even other Inverters and Beacons.
+-- Resolution is simultaneous: a Beacon still projects from its generated position even if
+-- another Beacon has switched it off, so two beacons crossing each other both fire. A
+-- deactivated Phantom keeps its hidden tile — it reveals on step but deals no damage. The
+-- end-of-build safety backstop re-checks the route after this runs.
 local function honourBeacons(grid, w, l)
 	for x = 1, w do
 		for z = 1, l do
 			if grid[x][z].tile == "Beacon" then
 				for _, t in ipairs(TileRules.beaconTargets(grid, x, z)) do
 					local tc = grid[t.x][t.z]
-					if tc.tile == "Phantom" then
-						tc.attr.Underlying = "Stone"
-					elseif TileDatabase.isHazard(tc.tile) then
+					if tc.tile ~= "Goal" and tc.tile ~= "Spawn" then
 						tc.attr.Deactivated = true
 					end
 				end

@@ -33,11 +33,13 @@ function TileRules.effectiveTile(cell)
 	return cell.tile
 end
 
+-- A deactivated Inverter (switched off by a beacon) no longer grounds its neighbours,
+-- so it is skipped here exactly as if it were plain Stone.
 function TileRules.hasAdjacentNeutralizer(grid, x, z)
 	for _, off in ipairs(NEIGHBOURS) do
 		local col = grid[x + off[1]]
 		local n = col and col[z + off[2]]
-		if n and TileDatabase.get(n.tile).IsNeutralizer then
+		if n and not n.attr.Deactivated and TileDatabase.get(n.tile).IsNeutralizer then
 			return true
 		end
 	end

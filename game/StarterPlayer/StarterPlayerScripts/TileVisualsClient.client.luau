@@ -1,6 +1,9 @@
 --!nonstrict
 --[[ TileVisualsClient — StarterPlayer > StarterPlayerScripts > TileVisualsClient (LocalScript).
-	 Spring-bleed fix: JumpHeight driven locally from the tile underfoot.
+	 Spring + Void are driven locally from the tile underfoot each frame, read from the
+	 collision pad's TileType / Inverted / Deactivated attributes. Driving the Void tint
+	 here — rather than from a server "Tile" event — is what stops it lingering after you
+	 step off a Void tile, jump, or die.
 	 Fog: the SERVER applies a tile's true visuals and marks it revealed, then sends a
 	 "Puff" ClientEffect per tile. This script only ANIMATES the puff and clears that
 	 tile's fog locally — it no longer computes reveal areas or applies tile visuals.
@@ -26,24 +29,24 @@ local ClientEffect = Remotes:WaitForChild("ClientEffect")
 ScreenEffects.init()
 
 ------------------------------------------------------------------------
--- Jump-height heartbeat (spring-bleed fix)
+-- Spring height + Void tint heartbeat (both driven from the tile underfoot)
 ------------------------------------------------------------------------
 local rp = RaycastParams.new()
 rp.FilterType = Enum.RaycastFilterType.Exclude
-
-local lastTile = nil
 
 local function tileUnder(char, hrp)
 	rp.FilterDescendantsInstances = { char }
 	local res  = workspace:Raycast(hrp.Position, Vector3.new(0, -10, 0), rp)
 	local inst = res and res.Instance
-	if not inst then return nil, false end
-	return inst:GetAttribute("TileType"), inst:GetAttribute("Inverted") or false
+	if not inst then return nil, false, false end
+	return inst:GetAttribute("TileType"),
+		inst:GetAttribute("Inverted") or false,
+		inst:GetAttribute("Deactivated") or false
 end
 
 RunService.Heartbeat:Connect(function()
 	local char = player.Character
-	if not char then lastTile = nil; return end
+	if not char then ScreenEffects.setVoid("none"); return end
 
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -52,23 +55,29 @@ RunService.Heartbeat:Connect(function()
 	hum.UseJumpPower = false   -- remove this line if your game uses JumpPower
 
 	local grounded = hum.FloorMaterial ~= Enum.Material.Air
-	local tile, inverted
+	local tile, inverted, deactivated
 	if grounded then
-		tile, inverted = tileUnder(char, hrp)
+		tile, inverted, deactivated = tileUnder(char, hrp)
 	else
-		tile, inverted = nil, false
+		tile, inverted, deactivated = nil, false, false
 	end
 
+	-- A tile switched off by a beacon behaves like plain Stone underfoot.
+	if deactivated then tile = nil end
+
+	-- Spring height follows the tile underfoot (Low when an adjacent Inverter grounds it).
 	if tile == "Spring" then
 		hum.JumpHeight = inverted and Config.Spring.Low or Config.Spring.High
 	else
 		hum.JumpHeight = Config.Spring.Default
 	end
 
-	if tile and tile ~= lastTile then
-		lastTile = tile
-	elseif not tile then
-		lastTile = nil
+	-- Void tint follows whether we are on a LIVE Void tile right now. Stepping off, jumping,
+	-- or losing the floor clears it on the next frame — this is the void-bleed fix.
+	if tile == "Void" then
+		ScreenEffects.setVoid(inverted and "light" or "dark")
+	else
+		ScreenEffects.setVoid("none")
 	end
 end)
 
@@ -132,9 +141,6 @@ ClientEffect.OnClientEvent:Connect(function(kind, a, b)
 		doPushSlide(a, b)
 	elseif kind == "Puff" then
 		if Config.Fog.Enabled then puffFogTile(a, b) end
-	elseif kind == "Tile" then
-		local tileType, inverted = a, b
-		ScreenEffects.setVoid((tileType == "Void") and (inverted and "light" or "dark") or "none")
 	end
 end)
 
